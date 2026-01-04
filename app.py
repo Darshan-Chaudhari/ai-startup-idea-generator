@@ -92,16 +92,16 @@ if "ideas" in st.session_state:
         scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
         creds = ServiceAccountCredentials.from_json_keyfile_name("/secrets/service-account.json", scope)
         gc = gspread.authorize(creds)
-        sheet = gc.open("Idea Generator Ratings").sheet1  # Create this Sheet first (share with service account email)
+        sheet = gc.open("Idea Generator Ratings").sheet1  
 
-        # Log on every new rating (or on submit button if preferred)
+        # Log on every new rating 
         if "last_rating" not in st.session_state or st.session_state.last_rating != rating:
             sheet.append_row([
                 datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                 rating,
                 field,
                 num_ideas,
-                st.session_state.ideas[:100] + "..."  # Snippet of ideas for context
+                st.session_state.ideas[:100] + "..." 
             ])
             st.session_state.last_rating = rating
             st.success(f"Rating {rating}/5 logged! ⭐")
