@@ -1,13 +1,20 @@
 import streamlit as st
 from vertexai.generative_models import GenerativeModel, GenerationConfig
 from vertexai import init
-import gspread
-from oauth2client.service_account import ServiceAccountCredentials
-from datetime import datetime
 import os
+from google.auth.transport.requests import Request
+from google.oauth2.service_account import Credentials as VertexCredentials
+from google.oauth2.service_account import Credentials as GspreadCredentials  # same class, different alias
+from datetime import datetime
+import gspread
 
-if "GOOGLE_APPLICATION_CREDENTIALS" in os.environ:
-    os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "/secrets/service-account.json"  # Points to uploaded JSON
+vertex_credentials = None
+if os.path.exists("/secrets/service-account.json"):
+    vertex_credentials = VertexCredentials.from_service_account_file(
+        "/secrets/service-account.json",
+        scopes=["https://www.googleapis.com/auth/cloud-platform"]
+    )
+    vertex_credentials.refresh(Request())
 
 st.set_page_config(page_title="AI Startup Idea Generator", page_icon="🚀")
 st.title("🚀 AI Startup Idea Generator")
@@ -24,9 +31,13 @@ if st.button("Generate Ideas"):
 
     with st.spinner("Brainstorming 2026 winners... 🤔"):
         try:
-            init(project="my-project-ai-idea", location="us-central1") 
+            init(
+                project="my-project-ai-idea",  # <-- replace if your project ID is different
+                location="us-central1",
+                credentials=vertex_credentials
+            )
 
-            model = GenerativeModel("gemini-2.5-pro")  
+            model = GenerativeModel("gemini-2.5-pro")
 
             prompt = f"""You are my entrepreneurship advisor with expert business knowledge and creative yet realistic mindset. Generate EXACTLY {num_ideas} complete startup ideas in {field}.
 
@@ -58,21 +69,18 @@ Complete EVERY idea and section FULLY with the required bullets—no truncation,
                 prompt,
                 generation_config=GenerationConfig(
                     temperature=temperature,
-                    max_output_tokens=8192  # Higher for full 3 detailed ideas + SWOT
+                    max_output_tokens=8192
                 )
             )
 
             ideas_md = response.text
             st.session_state.ideas = ideas_md 
-
             st.success("Ideas generated! 🚀")
-
 
         except Exception as e:
             st.error(f"Vertex AI error: {str(e)}")
             st.info("Fixes: Check project ID, enable Vertex AI API, or quota in console.cloud.google.com/vertex-ai")
 
-# === PERSIST IDEAS AND SHOW RATING (outside button) ===
 if "ideas" in st.session_state:
     st.markdown("### Your Latest Startup Ideas")
     st.markdown(st.session_state.ideas)
@@ -87,37 +95,36 @@ if "ideas" in st.session_state:
         key="idea_rating"
     )
 
-    # === LOG RATING TO GOOGLE SHEET ===
+    # ---------- LOG RATING TO GOOGLE SHEET ----------
     try:
         scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-        creds = ServiceAccountCredentials.from_json_keyfile_name("/secrets/service-account.json", scope)
-        gc = gspread.authorize(creds)
+        gspread_creds = GspreadCredentials.from_service_account_file(
+            "/secrets/service-account.json", scopes=scope)
+        gc = gspread.authorize(gspread_creds)
         sheet = gc.open("Idea Generator Ratings").sheet1  
 
-        # Log on every new rating 
         if "last_rating" not in st.session_state or st.session_state.last_rating != rating:
             sheet.append_row([
                 datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                 rating,
                 field,
                 num_ideas,
-                st.session_state.ideas[:100] + "..." 
+                st.session_state.ideas[:200] + "..."  
             ])
             st.session_state.last_rating = rating
-            st.success(f"Rating {rating}/5 logged! ⭐")
-
-        # Show live average from session (Sheet has full data)
-        if "ratings" not in st.session_state:
-            st.session_state.ratings = []
-        if st.session_state.last_rating:
-            st.session_state.ratings.append(rating)  # Local avg for immediate feedback
-
-        if st.session_state.ratings:
-            avg = sum(st.session_state.ratings) / len(st.session_state.ratings)
-            st.info(f"Local average: {avg:.2f}/5")
+            st.success(f"Rating {rating}/5 logged to Sheet! ⭐")
 
     except Exception as log_e:
-        st.warning(f"Logging skipped (check Sheet sharing): {str(log_e)}")
+        st.warning(f"Sheet logging failed: {str(log_e)}")
+
+    if "ratings" not in st.session_state:
+        st.session_state.ratings = []
+    if rating not in st.session_state.ratings:  # avoid duplicates on rerun
+        st.session_state.ratings.append(rating)
+
+    if st.session_state.ratings:
+        avg = sum(st.session_state.ratings) / len(st.session_state.ratings)
+        st.info(f"Local average: {avg:.2f}/5 across {len(st.session_state.ratings)} rating(s)")
 
     if st.button("Clear Ideas & Ratings"):
         st.session_state.clear()
