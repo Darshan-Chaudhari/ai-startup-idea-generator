@@ -7,6 +7,15 @@ from google.oauth2.service_account import Credentials as VertexCredentials
 from google.oauth2.service_account import Credentials as GspreadCredentials  # same class, different alias
 from datetime import datetime
 import gspread
+import json
+from io import StringIO
+
+
+credentials = None
+if "SERVICE_ACCOUNT_JSON" in st.secrets:
+    json_str = st.secrets["SERVICE_ACCOUNT_JSON"]
+    json_file = StringIO(json_str)
+    credentials = VertexCredentials.from_service_account_file(json_file.name, scopes=["https://www.googleapis.com/auth/cloud-platform"])
 
 vertex_credentials = None
 if os.path.exists("/secrets/service-account.json"):
@@ -98,8 +107,10 @@ if "ideas" in st.session_state:
     # ---------- LOG RATING TO GOOGLE SHEET ----------
     try:
         scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-        gspread_creds = GspreadCredentials.from_service_account_file(
-            "/secrets/service-account.json", scopes=scope)
+        gspread_creds = GspreadCredentials.from_service_account_info(
+    json.loads(st.secrets["SERVICE_ACCOUNT_JSON"]),
+    scopes=scope
+)
         gc = gspread.authorize(gspread_creds)
         sheet = gc.open("Idea Generator Ratings").sheet1  
 
