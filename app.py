@@ -7,23 +7,18 @@ from google.oauth2.service_account import Credentials as VertexCredentials
 from google.oauth2.service_account import Credentials as GspreadCredentials  # same class, different alias
 from datetime import datetime
 import gspread
+
 import json
-from io import StringIO
+from google.oauth2.service_account import Credentials as VertexCredentials
 
-
-credentials = None
-if "SERVICE_ACCOUNT_JSON" in st.secrets:
-    json_str = st.secrets["SERVICE_ACCOUNT_JSON"]
-    json_file = StringIO(json_str)
-    credentials = VertexCredentials.from_service_account_file(json_file.name, scopes=["https://www.googleapis.com/auth/cloud-platform"])
-
+# Load from string secret (for deployment)
 vertex_credentials = None
-if os.path.exists("/secrets/service-account.json"):
-    vertex_credentials = VertexCredentials.from_service_account_file(
-        "/secrets/service-account.json",
+if "SERVICE_ACCOUNT_JSON" in st.secrets:
+    json_dict = json.loads(st.secrets["SERVICE_ACCOUNT_JSON"])
+    vertex_credentials = VertexCredentials.from_service_account_info(
+        json_dict,
         scopes=["https://www.googleapis.com/auth/cloud-platform"]
     )
-    vertex_credentials.refresh(Request())
 
 st.set_page_config(page_title="AI Startup Idea Generator", page_icon="🚀")
 st.title("🚀 AI Startup Idea Generator")
@@ -109,8 +104,7 @@ if "ideas" in st.session_state:
         scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
         gspread_creds = GspreadCredentials.from_service_account_info(
     json.loads(st.secrets["SERVICE_ACCOUNT_JSON"]),
-    scopes=scope
-)
+    scopes=scope)
         gc = gspread.authorize(gspread_creds)
         sheet = gc.open("Idea Generator Ratings").sheet1  
 
